@@ -1,0 +1,427 @@
+<html>
+  <head>
+    <title>Inventory Management System</title>
+  </head>
+  <body>
+    <header>
+      <h1>Inventory Management System</h1>
+      <hr />
+    </header>
+
+    <!-- LOGIN -->
+    <section id="loginSection">
+      <h2>Login</h2>
+      <p>Username: <input type="text" id="username" /></p>
+      <p>Password: <input type="password" id="password" /></p>
+      <input type="button" value="Login" onclick="login()" />
+      <p>Demo account: admin / admin123</p>
+    </section>
+
+    <!-- BUONG SYSTEM (nakatago hanggang makapag-login) -->
+    <div id="systemSection" style="display: none">
+      <input type="button" value="Log out" onclick="logout()" />
+
+      <!-- ADD ITEM -->
+      <section>
+        <h2>Add Item</h2>
+        <p>Item name: <input type="text" id="itemName" /></p>
+        <p>Category: <input type="text" id="category" /></p>
+        <p>Quantity: <input type="number" id="quantity" value="0" min="0" /></p>
+        <p>Reorder at: <input type="number" id="reorder" value="5" min="0" /></p>
+        <p>Max stock: <input type="number" id="maxStock" value="50" min="1" /></p>
+        <p>Expiry date (optional): <input type="date" id="expiry" /></p>
+        <input type="button" value="Add Item" onclick="addItem()" />
+      </section>
+
+      <hr />
+
+      <!-- STOCK IN / STOCK OUT -->
+      <section>
+        <h2>Update Stock</h2>
+        <p>Item: <select id="stockItem"></select></p>
+        <p>
+          Type:
+          <select id="stockType">
+            <option value="in">Stock in (delivery)</option>
+            <option value="out">Stock out (sale / damaged)</option>
+          </select>
+        </p>
+        <p>Quantity: <input type="number" id="stockQty" value="1" min="1" /></p>
+        <p>Note: <input type="text" id="stockNote" /></p>
+        <input type="button" value="Update Stock" onclick="updateStock()" />
+      </section>
+
+      <hr />
+
+      <!-- INVENTORY LIST -->
+      <h2>Inventory</h2>
+      <p>Search: <input type="text" id="search" onkeyup="showItems()" /></p>
+      <div id="itemList"></div>
+
+      <hr />
+
+      <h2>Replenishment</h2>
+      <p>Items at or below the reorder point. Suggested order = max stock - quantity.</p>
+      <div id="replenishList"></div>
+      <br />
+      <input type="button" value="Send order to warehouse" onclick="sendOrder()" />
+      <h3>Order History</h3>
+      <div id="orderList"></div>
+
+      <hr />
+
+      <!-- STOCK COUNT -->
+      <section>
+        <h2>Stock Count</h2>
+        <p>Count the shelf and enter the actual number. High-value items (cigarettes, load) should be counted daily.</p>
+        <p>Item: <select id="countItem"></select></p>
+        <p>Actual count: <input type="number" id="countQty" value="0" min="0" /></p>
+        <p>
+          Reason if different:
+          <select id="countReason">
+            <option>Pilferage</option>
+            <option>Damaged goods</option>
+            <option>Wrong scan / human error</option>
+          </select>
+        </p>
+        <input type="button" value="Save Count" onclick="saveCount()" />
+      </section>
+
+      <hr />
+
+      <h2>Stock Movements</h2>
+      <div id="moveList"></div>
+    </div>
+
+    <footer>
+      <hr />
+      <b>&copy; 2026 Inventory Management System</b>
+    </footer>
+
+    <script>
+      /*
+        PAANO MAG-DEBUG SA DEFENSE:
+        1. Pindutin ang F12, tapos buksan ang tab na "Console".
+        2. I-type ang  items  para makita ang listahan ng items.
+           I-type ang  movements  para makita ang history ng stock.
+           I-type ang  orders  para makita ang mga order sa warehouse.
+        3. Para ibalik sa sample data: i-type ang  localStorage.clear()  tapos F5.
+        4. Maglagay ng  console.log("dito")  sa loob ng function para makita kung tumatakbo.
+      */
+
+      // ---------- DATA ----------
+      // Bawat item ay may: name, category, qty (quantity), reorder (reorder point), max (max stock), expiry
+      var items = [];
+      var movements = [];
+var orders = [];
+
+      if (localStorage.getItem("inv_items") == null) {
+        // Unang beses lang: sample data
+        items = [
+          { name: "Bottled water", category: "Beverages", qty: 48, reorder: 30, max: 120, expiry: "" },
+          { name: "Ice (bag)", category: "Beverages", qty: 6, reorder: 10, max: 40, expiry: "" },
+          { name: "Instant noodles", category: "Dry goods", qty: 60, reorder: 24, max: 150, expiry: "" },
+          { name: "Ready-to-eat meal", category: "Fresh food", qty: 18, reorder: 10, max: 30, expiry: "2099-01-01" },
+          { name: "Cigarettes (pack)", category: "High-value", qty: 120, reorder: 50, max: 300, expiry: "" },
+          { name: "Prepaid load card", category: "High-value", qty: 0, reorder: 20, max: 100, expiry: "" },
+        ];
+      } else {
+        items = JSON.parse(localStorage.getItem("inv_items"));
+      }
+
+      if (localStorage.getItem("inv_movements") != null) {
+        movements = JSON.parse(localStorage.getItem("inv_movements"));
+      }
+      if (localStorage.getItem("inv_orders") != null) {
+        orders = JSON.parse(localStorage.getItem("inv_orders"));
+      }
+
+      // I-save sa browser para hindi mawala pag nag-refresh
+      function saveData() {
+        localStorage.setItem("inv_items", JSON.stringify(items));
+        localStorage.setItem("inv_movements", JSON.stringify(movements));
+        localStorage.setItem("inv_orders", JSON.stringify(orders));
+      }
+
+      // ---------- LOGIN ----------
+      function login() {
+        var username = document.getElementById("username").value;
+        var password = document.getElementById("password").value;
+
+        if (username === "admin" && password === "admin123") {
+          document.getElementById("loginSection").style.display = "none";
+          document.getElementById("systemSection").style.display = "block";
+          showAll();
+        } else {
+          alert("Wrong username or password.");
+        }
+      }
+
+      function logout() {
+        document.getElementById("systemSection").style.display = "none";
+        document.getElementById("loginSection").style.display = "block";
+        document.getElementById("password").value = "";
+      }
+
+      // ---------- STATUS NG ITEM ----------
+      // Expired, Out of stock, Low stock, o OK
+      function getStatus(item) {
+        var today = new Date().toISOString().slice(0, 10);
+
+        if (item.expiry !== "" && item.expiry < today) return "Expired";
+        if (item.qty === 0) return "Out of stock";
+        if (item.qty <= item.reorder) return "Low stock";
+        return "OK";
+      }
+
+      // ---------- ADD ITEM ----------
+      function addItem() {
+        var name = document.getElementById("itemName").value;
+        if (name === "") {
+          alert("Please enter the item name.");
+          return;
+        }
+        var category = document.getElementById("category").value;
+        if (category === "") {
+          alert("Please enter the category.");
+          return;
+        }
+        var qty = Number(document.getElementById("quantity").value);
+        var reorder = Number(document.getElementById("reorder").value);
+        var max = Number(document.getElementById("maxStock").value);
+        if (max < reorder) {
+          alert("Max stock must be higher than the reorder point.");
+          return;
+        }
+        var expiry = document.getElementById("expiry").value;
+
+        // Bawal ang parehong pangalan
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].name.toLowerCase() === name.toLowerCase()) {
+            alert("This item already exists.");
+            return;
+          }
+        }
+
+        items.push({ name: name, category: category, qty: qty, reorder: reorder, max: max, expiry: expiry });
+        saveData();
+        showAll();
+
+        document.getElementById("itemName").value = "";
+        document.getElementById("category").value = "";
+        document.getElementById("quantity").value = 0;
+        document.getElementById("expiry").value = "";
+        alert("Item added!");
+      }
+
+      // ---------- DELETE ITEM ----------
+      function deleteItem(index) {
+        var sure = confirm("Delete " + items[index].name + "?");
+        if (sure) {
+          items.splice(index, 1); // tanggalin ang 1 item sa position na ito
+          saveData();
+          showAll();
+        }
+      }
+
+      // ---------- STOCK IN / STOCK OUT ----------
+      function updateStock() {
+        var index = document.getElementById("stockItem").value;
+        if (index === "") {
+          alert("Please add an item first.");
+          return;
+        }
+        var type = document.getElementById("stockType").value;
+        var qty = Number(document.getElementById("stockQty").value);
+        var note = document.getElementById("stockNote").value;
+
+        if (qty <= 0) {
+          alert("Quantity at least 1.");
+          return;
+        }
+        // Hindi pwedeng mag-stock out ng higit sa available
+        if (type === "out" && qty > items[index].qty) {
+          alert("Only " + items[index].qty + " in stock.");
+          return;
+        }
+
+        if (type === "in") {
+          items[index].qty = items[index].qty + qty;
+        } else {
+          items[index].qty = items[index].qty - qty;
+        }
+
+        // I-record sa history
+        movements.unshift({
+          date: new Date().toLocaleString(),
+          name: items[index].name,
+          type: type === "in" ? "Stock in" : "Stock out",
+          qty: qty,
+          note: note,
+        });
+
+        saveData();
+        showAll();
+        document.getElementById("stockNote").value = "";
+        alert("Stock updated!\n" + items[index].name + " now has " + items[index].qty + " in stock.");
+      }
+
+      // ---------- IPAKITA SA SCREEN ----------
+      function showAll() {
+        showItems();
+        showReplenish();
+        showMovements();
+        fillItemChoices();
+      }
+
+      // Listahan sa dropdown ng Update Stock
+      function fillItemChoices() {
+        var options = "";
+        var countOptions = "";
+        for (var i = 0; i < items.length; i++) {
+          options = options + "<option value='" + i + "'>" + items[i].name + "</option>";
+
+          var label = items[i].name;
+          if (items[i].category === "High-value") label = label + " (high-value, count daily)";
+          countOptions = countOptions + "<option value='" + i + "'>" + label + "</option>";
+        }
+        document.getElementById("stockItem").innerHTML = options;
+        document.getElementById("countItem").innerHTML = countOptions;
+      }
+
+      // Table ng lahat ng items (may search)
+      function showItems() {
+        var search = document.getElementById("search").value.toLowerCase();
+        var table =
+          "<table border='1' cellpadding='6'>" +
+          "<tr><th>Item</th><th>Category</th><th>Qty</th><th>Reorder at</th><th>Expiry</th><th>Status</th><th>Action</th></tr>";
+
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          var text = (item.name + " " + item.category).toLowerCase();
+
+          if (text.indexOf(search) === -1) continue; // laktawan kung hindi tugma sa search
+
+          table =
+            table +
+            "<tr><td>" + item.name + "</td>" +
+            "<td>" + item.category + "</td>" +
+            "<td>" + item.qty + "</td>" +
+            "<td>" + item.reorder + "</td>" +
+            "<td>" + (item.expiry === "" ? "-" : item.expiry) + "</td>" +
+            "<td>" + getStatus(item) + "</td>" +
+            "<td><input type='button' value='Delete' onclick='deleteItem(" + i + ")' /></td></tr>";
+        }
+        table = table + "</table>";
+        document.getElementById("itemList").innerHTML = table;
+      }
+
+      // ---------- REPLENISHMENT (reorder sa warehouse) ----------
+      // Mga item na umabot na sa reorder point. Suggested order = max stock - qty
+      function showReplenish() {
+        var table =
+          "<table border='1' cellpadding='6'>" +
+          "<tr><th>Item</th><th>Qty</th><th>Reorder at</th><th>Max stock</th><th>Suggested order</th></tr>";
+        var count = 0;
+
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].qty <= items[i].reorder) {
+            count = count + 1;
+            table =
+              table +
+              "<tr><td>" + items[i].name + "</td><td>" + items[i].qty + "</td><td>" + items[i].reorder + "</td>" +
+              "<td>" + items[i].max + "</td><td>" + (items[i].max - items[i].qty) + "</td></tr>";
+          }
+        }
+        table = table + "</table>";
+        if (count === 0) table = "Nothing to reorder.";
+        document.getElementById("replenishList").innerHTML = table;
+
+        // History ng mga order
+        var history = "No orders sent yet.";
+        if (orders.length > 0) {
+          history = "<table border='1' cellpadding='6'><tr><th>Date</th><th>Items ordered</th></tr>";
+          for (var j = 0; j < orders.length; j++) {
+            history = history + "<tr><td>" + orders[j].date + "</td><td>" + orders[j].lines + "</td></tr>";
+          }
+          history = history + "</table>";
+        }
+        document.getElementById("orderList").innerHTML = history;
+      }
+
+      function sendOrder() {
+        var lines = "";
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].qty <= items[i].reorder) {
+            if (lines !== "") lines = lines + ", ";
+            lines = lines + items[i].name + " x" + (items[i].max - items[i].qty);
+          }
+        }
+        if (lines === "") {
+          alert("Nothing to order.");
+          return;
+        }
+        orders.unshift({ date: new Date().toLocaleString(), lines: lines });
+        saveData();
+        showAll();
+        alert("Order sent to warehouse!\n" + lines);
+      }
+
+      // ---------- STOCK COUNT (audit) ----------
+      function saveCount() {
+        var index = document.getElementById("countItem").value;
+        if (index === "") {
+          alert("Please add an item first.");
+          return;
+        }
+        var actual = document.getElementById("countQty").value;
+        if (actual === "" || Number(actual) < 0) {
+          alert("Please enter the actual count.");
+          return;
+        }
+        actual = Number(actual);
+        var reason = document.getElementById("countReason").value;
+        var difference = actual - items[index].qty; // negative = kulang
+
+        if (difference === 0) {
+          alert("Count matches the system. No change.");
+          return;
+        }
+
+        items[index].qty = actual; // i-correct ang bilang sa system
+
+        movements.unshift({
+          date: new Date().toLocaleString(),
+          name: items[index].name,
+          type: "Count adjustment",
+          qty: difference,
+          note: reason,
+        });
+
+        saveData();
+        showAll();
+        alert("Count saved!\n" + items[index].name + " adjusted by " + difference + " (" + reason + ").");
+      }
+
+      // History ng stock in / out
+      function showMovements() {
+        if (movements.length === 0) {
+          document.getElementById("moveList").innerHTML = "No movements yet.";
+          return;
+        }
+        var table =
+          "<table border='1' cellpadding='6'>" +
+          "<tr><th>Date</th><th>Item</th><th>Type</th><th>Qty</th><th>Note</th></tr>";
+
+        for (var i = 0; i < movements.length; i++) {
+          var m = movements[i];
+          table =
+            table +
+            "<tr><td>" + m.date + "</td><td>" + m.name + "</td><td>" + m.type + "</td><td>" + m.qty + "</td><td>" + m.note + "</td></tr>";
+        }
+        table = table + "</table>";
+        document.getElementById("moveList").innerHTML = table;
+      }
+    </script>
+  </body>
+</html>
